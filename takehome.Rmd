@@ -1,0 +1,163 @@
+---
+title: "STAT231 exam 2 takehome problem"
+author: "Jeremy Margolis"
+date: "April 9, 2018"
+output:
+  pdf_document:
+    fig_height: 7.5
+    fig_width: 7
+  html_document:
+    fig_height: 5
+    fig_width: 7
+  word_document:
+    fig_height: 3
+    fig_width: 5
+---
+
+```{r, setup, include=FALSE}
+library(mdsr)   # Load additional packages here 
+knitr::opts_chunk$set(
+  tidy=FALSE,     # display code as typed
+  size="small")   # slightly smaller font for code
+```
+
+This assignment is due via submission through Gradescope by the start of class on Tuesday, April 17th.  Please upload your formatted pdf to receive full credit.  
+
+All work on this assignment must be done on your own.  No interaction with anyone but the instructor is allowed.  You may consult other internet resources but you must list them here.
+
+### Resources used
+
+Please list all resources used beyond the textbook, DataCamp, and other class materials
+
+- https://amunategui.github.io/ggmap-example/
+- XX
+
+#### Let it snow
+
+There was a snowstorm on March 13, 1993 that caused a lot of travel complications (see https://www.weather.gov/ilm/Superstorm93 for an overview).  Your manager would like you to analyze what impact this storm had on commercial domestic flight delays.  Undertake such an analysis and compare the pattern of delays and cancellations on that date with delays and cancellations a week before and afterwards (e.g., use March 6th and March 20th of that year as comparisons).  
+
+I have prepared a file `snowstorm.Rda` with the downloaded data and included this on Moodle in the `hw` folder.
+
+You can focus your presentation however you like.  It could explore what happened in a particular region, a specific airline or set of airlines, or some other angle.  The goal is to tell a compelling story backed up with data.  
+
+You should think about ways to use the data wrangling skills that you've developed in conjunction with visualization techniques, including methods for spatial, clustering, and network statistics.  
+
+There are some limits to your submission.  You may include up to three figures and no more than two tables.  Your text should be limited to two pages.  Avoid jargon and ensure that you give the big picture in an executive summary at the start of your report.  
+
+Note that you should include all of your data wrangling and analysis in a technical appendix appearing after your report (see the example in this file).  Be sure to pay attention to your style, indentation, formatting, and comments.
+
+All of these aspects will be included in my grading rubric.
+
+```{r ingest1, eval=TRUE, include=FALSE}
+library(mdsr)
+library(dplyr)
+library(ggmap)
+library(evaluate)
+
+snowstorm <- readRDS("snowstorm.Rda")
+airportcodes <- readRDS("airportcodes")
+
+snowstorm_byairport_6<- snowstorm %>%
+  filter(day == 6) %>%
+  mutate(time_hour = as.POSIXct(time_hour)) %>%
+  filter(time_hour > "1993-03-06 06:00:00") %>%
+  mutate(time_group = ifelse(time_hour < "1993-03-06 12:00:00", "6am-12pm EDT",
+                             ifelse(time_hour < "1993-03-06 18:00:00", "12pm-6pm EDT","6pm-12am EDT"))) %>%
+  mutate(time_group = factor(time_group, levels=c("6am-12pm EDT","12pm-6pm EDT","6pm-12am EDT"))) %>%
+  group_by(origin, time_group) %>%
+  summarize (total = n(), total.cancelled = sum(cancelled), total.diverted = sum(diverted), percent.cancelled = 100*sum(cancelled)/n()) %>%
+  filter(total > 5) %>%
+  arrange(desc(percent.cancelled))
+
+snowstorm_byairport_lonlat_6 <- snowstorm_byairport_6 %>%
+  left_join(airportcodes, by=c("origin" = "locationID")) %>%
+  mutate(lon = -Longitude, lat=Latitude)
+
+snowstorm_byairport_13 <- snowstorm %>%
+  filter(day == 13) %>%
+  mutate(time_hour = as.POSIXct(time_hour)) %>%
+  filter(time_hour > "1993-03-13 06:00:00") %>%
+  mutate(time_group = ifelse(time_hour < "1993-03-13 12:00:00", "6am-12pm EDT",
+                             ifelse(time_hour < "1993-03-13 18:00:00", "12pm-6pm EDT","6pm-12am EDT"))) %>%
+  mutate(time_group = factor(time_group, levels=c("6am-12pm EDT","12pm-6pm EDT","6pm-12am EDT"))) %>%
+  group_by(origin, time_group) %>%
+  summarize (total = n(), total.cancelled = sum(cancelled), total.diverted = sum(diverted), percent.cancelled = 100*sum(cancelled)/n()) %>%
+  filter(total > 5) %>%
+  arrange(desc(percent.cancelled))
+
+snowstorm_byairport_lonlat_13 <- snowstorm_byairport_13 %>%
+  left_join(airportcodes, by=c("origin" = "locationID")) %>%
+  mutate(lon = -Longitude, lat=Latitude)
+
+
+
+map<-get_map(location='united states', zoom=4, maptype = 'terrain', source='google',color='color')
+ggmap(map)
+
+```
+
+```{r wrangle1, eval=TRUE, include=FALSE}
+tally(cancelled ~ day, data=snowstorm)
+```
+
+Be sure to do something reasonable with arrival delays for the cancelled flights!
+
+```{r}
+# be sure to remove this chunk!
+favstats(arr_delay ~ day, data=filter(snowstorm, cancelled == 1))
+```
+
+
+
+\newpage
+
+EXECUTIVE SUMMARY: XX
+
+
+REPORT (no more than two pages):
+
+Introduction and motivation
+
+Overview of Data
+ 
+Sample reference: Figure 1 displays the association of arrival delay (in minutes) and distance traveled (in miles) for Bradley Airport on the selected days from March, 1993.
+
+Conclusion
+
+\newpage
+
+FIGURES (no more than 3) AND TABLES (no more than 2): please number and refer from text: 
+
+```{r graph1, eval=TRUE, message=FALSE, echo=FALSE}
+snowstorm %>%
+  filter(origin == "BDL") %>%
+  ggplot(., aes(x = distance, y = arr_delay, color = as.factor(day))) + geom_point() +
+    geom_smooth(se = FALSE) + xlab("don't forget") + ylab("axis labels!") +
+    labs(title = 
+      "Figure 1: display of arrival delay (minutes) vs. distance (miles)")
+
+ggmap(map) + geom_point(data = snowstorm_byairport_lonlat_6,
+aes(x = lon, y = lat, color=percent.cancelled, size=total), alpha=.75)  +
+  scale_colour_gradient(low="yellow", high = "red") +
+  facet_grid(.~time_group)
+
+ggmap(map) + geom_point(data = snowstorm_byairport_lonlat_13,
+aes(x = lon, y = lat, color=percent.cancelled, size=total), alpha=.75)  +
+  scale_colour_gradient(low="yellow", high = "red") +
+  facet_grid(.~time_group)
+```
+
+\newpage
+
+APPENDIX:
+
+
+```{r ingest1, eval=FALSE, include=TRUE}
+```
+
+```{r wrangle1, eval=FALSE, include=TRUE}
+```
+
+```{r graph1, eval=FALSE, include=TRUE}
+```
+
